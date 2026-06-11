@@ -9,6 +9,7 @@ import io.github.silentdevelopment.atlas.exception.ConfigEncodeException;
 import io.github.silentdevelopment.atlas.node.ConfigNode;
 import io.github.silentdevelopment.atlas.node.ConfigNodeType;
 import io.github.silentdevelopment.atlas.node.MutableConfigNode;
+import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
@@ -30,7 +31,13 @@ public final class YamlConfigCodec implements ConfigCodec {
     }
 
     public static YamlConfigCodec create() {
-        return new YamlConfigCodec(new Yaml());
+        DumperOptions options = new DumperOptions();
+        options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+        options.setPrettyFlow(true);
+        options.setIndent(2);
+        options.setIndicatorIndent(2);
+        options.setWidth(120);
+        return new YamlConfigCodec(new Yaml(options));
     }
 
     @Override
@@ -39,7 +46,7 @@ public final class YamlConfigCodec implements ConfigCodec {
     }
 
     @Override
-    public ConfigDocument decode(InputStream input) throws IOException, ConfigDecodeException {
+    public ConfigDocument decode(InputStream input) throws ConfigDecodeException {
         Objects.requireNonNull(input, "input");
 
         try {
@@ -62,8 +69,55 @@ public final class YamlConfigCodec implements ConfigCodec {
         Objects.requireNonNull(output, "output");
 
         OutputStreamWriter writer = new OutputStreamWriter(output, StandardCharsets.UTF_8);
-        yaml.dump(toYamlValue(document.root()), writer);
+        String yamlText = yaml.dump(document.root());
+        writer.write(addBlankLinesBetweenTopLevelSections(yamlText));
         writer.flush();
+    }
+
+    private static String addBlankLinesBetweenTopLevelSections(String yamlText) {
+        String[] lines = yamlText.replace("\r\n", "\n").replace('\r', '\n').split("\n", -1);
+        StringBuilder builder = new StringBuilder(yamlText.length() + 32);
+        boolean wroteContentLine = false;
+        boolean previousLineBlank = false;
+
+        for (String line : lines) {
+            if (line.isEmpty()) {
+                if (!previousLineBlank) {
+                    builder.append('\n');
+                }
+
+                previousLineBlank = true;
+                continue;
+            }
+
+            boolean topLevelKey = isTopLevelKey(line);
+            if (topLevelKey && wroteContentLine && !previousLineBlank) {
+                builder.append('\n');
+            }
+
+            builder.append(line).append('\n');
+            wroteContentLine = true;
+            previousLineBlank = false;
+        }
+
+        return builder.toString();
+    }
+
+    private static boolean isTopLevelKey(String line) {
+        if (line.isBlank()) {
+            return false;
+        }
+
+        if (Character.isWhitespace(line.charAt(0))) {
+            return false;
+        }
+
+        if (line.startsWith("-")) {
+            return false;
+        }
+
+        int colonIndex = line.indexOf(':');
+        return colonIndex > 0;
     }
 
     private MutableConfigNode toNode(Object value) {
