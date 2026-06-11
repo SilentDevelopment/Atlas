@@ -35,7 +35,7 @@ public final class YamlConfigCodec implements ConfigCodec {
         options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
         options.setPrettyFlow(true);
         options.setIndent(2);
-        options.setIndicatorIndent(2);
+        options.setIndicatorIndent(0);
         options.setWidth(120);
         return new YamlConfigCodec(new Yaml(options));
     }
@@ -68,10 +68,14 @@ public final class YamlConfigCodec implements ConfigCodec {
         Objects.requireNonNull(document, "document");
         Objects.requireNonNull(output, "output");
 
-        OutputStreamWriter writer = new OutputStreamWriter(output, StandardCharsets.UTF_8);
-        String yamlText = yaml.dump(document.root());
-        writer.write(addBlankLinesBetweenTopLevelSections(yamlText));
-        writer.flush();
+        try {
+            OutputStreamWriter writer = new OutputStreamWriter(output, StandardCharsets.UTF_8);
+            String yamlText = yaml.dump(toYamlValue(document.root()));
+            writer.write(addBlankLinesBetweenTopLevelSections(yamlText));
+            writer.flush();
+        } catch (Exception exception) {
+            throw new ConfigEncodeException("Failed to encode YAML config.", exception);
+        }
     }
 
     private static String addBlankLinesBetweenTopLevelSections(String yamlText) {
@@ -150,7 +154,7 @@ public final class YamlConfigCodec implements ConfigCodec {
         return ConfigNodes.scalar(value);
     }
 
-    private Object toYamlValue(ConfigNode node) {
+    private static Object toYamlValue(ConfigNode node) {
         if (node.type() == ConfigNodeType.OBJECT) {
             Map<String, Object> map = new LinkedHashMap<>();
 
